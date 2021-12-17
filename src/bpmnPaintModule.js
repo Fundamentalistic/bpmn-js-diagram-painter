@@ -23,7 +23,7 @@ const empty_xml = `
 // containerSelector - css селектор контейнера, который будет содержать bpmnPaint
 // modules - массив дополнений bpmn-js ( опционально )
 // startEventName - имя стартового события
-export function bpmnPaint(containerSelector, modules = [], startEventName = ''){
+export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
 
     this.bpmn = new BpmnModeller({
         container: containerSelector,
@@ -46,6 +46,9 @@ export function bpmnPaint(containerSelector, modules = [], startEventName = ''){
         console.log(self.eventBus);
 
         const disabledEvents = [
+            'element.hover',
+            'element.click',
+            'element.dblclick',
             'element.hover',
             'bendpoint.move.hover',
             'connect.hover',
@@ -71,6 +74,34 @@ export function bpmnPaint(containerSelector, modules = [], startEventName = ''){
 
         document.dispatchEvent(document.onInitEvent);
     });
+
+    this.makeConnection = function(params){
+        const currentConnection = this.modeling.createConnection(
+            params.from,
+            params.to,
+            {
+                type: params.type || 'bpmn:SequenceFlow',
+                businessObject: this.bpmnFactory.create(params.type || 'bpmn:SequenceFlow', {
+                    id: Math.random().toString(36).substr(0, 20),
+                    name: params.label,
+                }),
+            },
+            this.process
+        );
+
+        if(params.waypoints){
+            const keys = Object.entries(params.waypoints);
+            console.log(keys);
+            keys.forEach(key => {
+                console.log(key[1]);
+                currentConnection.waypoints[parseInt(key[0])].x = key[1].x;
+                currentConnection.waypoints[parseInt(key[0])].y = key[1].y;
+            });
+            this.modeling.updateProperties(currentConnection, {
+                waypoints: currentConnection.waypoints
+            })
+        }
+    }
 
     this.drawGroup = function(group){
         console.log(!group.elements);
@@ -118,12 +149,16 @@ export function bpmnPaint(containerSelector, modules = [], startEventName = ''){
         }, this.process);
 
         if(group.connection){
-            this.modeling.createConnection(
-                this.elementRegistry.get(group.connection),
-                groupObject,
-                {type: 'bpmn:SequenceFlow'},
-                this.process
-            );
+            if(typeof group.connection === 'string'){
+                this.makeConnection({
+                        from: this.elementRegistry.get(group.connection),
+                        to: groupObject,
+                    }
+                );
+            }
+            if(typeof group.connection === 'object'){
+                this.makeConnection(group.connection);
+            }
         }
 
         group.elements.forEach(element => {
@@ -163,62 +198,30 @@ export function bpmnPaint(containerSelector, modules = [], startEventName = ''){
         });
 
         const gatewayShape = this.modeling.createShape(gatewayObject, {
-            x: elem.position.i * this.coordinateSystem.stepX,
-            y: elem.position.j * this.coordinateSystem.stepY
+            x: elem.position.i ? elem.position.i * this.coordinateSystem.stepX : elem.position.x,
+            y: elem.position.j ? elem.position.j * this.coordinateSystem.stepY : elem.position.y
         }, this.process);
 
-        const c1 = this.modeling.createConnection(
-            this.elementRegistry.get(elem.inputElement),
-            gatewayShape,
-            {
-                type: elem.connectionType || 'bpmn:SequenceFlow',
-            },
-            this.process
-        );
+        this.makeConnection({
+            from: this.elementRegistry.get(elem.inputElement.name),
+            to: gatewayShape,
+            waypoints: elem.inputElement.waypoints
+        });
 
-        console.log(c1);
-
-        this.modeling.createConnection(
-            gatewayShape,
-            this.elementRegistry.get(elem.ifTrueElement),
-            {
-                type: elem.connectionType || 'bpmn:SequenceFlow',
-                businessObject: elem.trueLabel ? this.bpmnFactory.create("bpmn:SequenceFlow", {
-                    id: Math.random().toString(36).substr(0, 20),
-                    name: elem.trueLabel
-                }) : undefined,
-            },
-            this.process
-        );
-
+        this.makeConnection({
+            from: gatewayShape,
+            to: this.elementRegistry.get(elem.ifTrueElement.name),
+            label: elem.ifTrueElement.label,
+            waypoints: elem.ifTrueElement.waypoints
+        });
         console.log(gatewayShape);
 
-        const newWP = c1.waypoints;
-        newWP[1].x = 100;
-        newWP[1].y = 100;
-
-        this.modeling.updateProperties(c1, {
-            waypoints: newWP
-        })
-
-        this.modeling.createConnection(
-            gatewayShape,
-            this.elementRegistry.get(elem.ifFalseElement),
-            {
-                type: elem.connectionType || 'bpmn:SequenceFlow',
-                businessObject: elem.falseLabel ? this.bpmnFactory.create("bpmn:SequenceFlow", {
-                    id: Math.random().toString(36).substr(0, 20),
-                    name: elem.falseLabel,
-                    bendpoints: [
-                        {x: 100, y: 200}
-                    ]
-                }) : undefined,
-                bendpoints: [
-                    {x: 100, y: 200}
-                ]
-            },
-            this.process
-        );
+        this.makeConnection({
+            from: gatewayShape,
+            to: this.elementRegistry.get(elem.ifFalseElement.name),
+            label: elem.ifFalseElement.label,
+            waypoints: elem.ifFalseElement.waypoints
+        });
     }
 
     this.drawLabel = function(elem){
