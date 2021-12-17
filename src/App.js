@@ -127,21 +127,41 @@ function App() {
                     },
                     ifTrueElement: {
                         name: 'group_2',
-                        label: 'true',
+                        label: {
+                            value: 'true',
+                            position: {
+                                x: 300,
+                                y: 300
+                            }
+                        },
                         waypoints: {
                             1: {
-                                x: 800,
-                                y: 700
+                                i: 4,
+                                j: 6
+                            },
+                            2: {
+                                i: 4,
+                                j: 7
                             }
                         }
                     },
                     ifFalseElement: {
                         name: 'group_3',
-                        label: 'false',
+                        label: {
+                            value: 'false',
+                            position: {
+                                x: 300,
+                                y: 300
+                            }
+                        },
                         waypoints: {
                             1: {
-                                x: 1100,
-                                y: 700
+                                i: 12,
+                                j: 6
+                            },
+                            2: {
+                                i: 12,
+                                j: 7
                             }
                         }
                     },
