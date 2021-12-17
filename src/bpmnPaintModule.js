@@ -19,6 +19,19 @@ const empty_xml = `
 </bpmn2:definitions>
 `;
 
+class EventBusLogger {
+    constructor(eventBus) {
+        const fire = eventBus.fire.bind(eventBus);
+
+        eventBus.fire = (type, data) => {
+            console.log(type, data);
+
+            fire(type, data);
+        };
+    }
+}
+EventBusLogger.$inject = ["eventBus"];
+
 // Инициализация главного класса
 // containerSelector - css селектор контейнера, который будет содержать bpmnPaint
 // modules - массив дополнений bpmn-js ( опционально )
@@ -28,8 +41,11 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
     this.bpmn = new BpmnModeller({
         container: containerSelector,
         additionalModules: [
-            // Подключаем дополнительные модули представляющие собой отдельный фунционал
-        ],
+            {
+                __init__: ["eventBusLogger"],
+                eventBusLogger: ["type", EventBusLogger]
+            }
+        ]
     });
 
     document.onInitEvent = new Event('onInitBpmnPainter');
@@ -52,12 +68,11 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
             'element.hover',
             'bendpoint.move.hover',
             'connect.hover',
-            'global-connect.hover'
+            'global-connect.hover',
+            'element.marker.update'
         ];
 
-        for(const e in disabledEvents){
-            self.eventBus.off(e);
-        }
+        self.eventBus.off(disabledEvents);
 
         self.process = this.elementRegistry.get('Process_1');
         self.startEvent = this.elementRegistry.get('StartEvent_1');
@@ -237,15 +252,15 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
 
     this.drawDiagram = function(diagramArray) {
         diagramArray.forEach(elem => {
-                if(elem.groupName){
-                    this.drawGroup(elem);
-                }
-                if(elem.inputElement){
-                    this.drawConditionElement(elem);
-                }
-                if(elem.label){
-                    this.drawLabel(elem);
-                }
+            if(elem.groupName){
+                this.drawGroup(elem);
+            }
+            if(elem.inputElement){
+                this.drawConditionElement(elem);
+            }
+            if(elem.label){
+                this.drawLabel(elem);
+            }
         });
     }
 
