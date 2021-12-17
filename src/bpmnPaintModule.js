@@ -41,10 +41,10 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
     this.bpmn = new BpmnModeller({
         container: containerSelector,
         additionalModules: [
-            {
-                __init__: ["eventBusLogger"],
-                eventBusLogger: ["type", EventBusLogger]
-            }
+            // {
+            //     __init__: ["eventBusLogger"],
+            //     eventBusLogger: ["type", EventBusLogger]
+            // }
         ]
     });
 
@@ -58,6 +58,13 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
         self.bpmnFactory = this.bpmn.get('bpmnFactory');
         self.modeling = this.bpmn.get('modeling');
         self.eventBus = this.bpmn.get('eventBus');
+
+        self.eventBus.on([
+            'commandStack.shape.move.postExecute',
+            'commandStack.connection.layout.postExecute'
+        ], function(e) {
+            console.log("on move: %o", e);
+        });
 
         console.log(self.eventBus);
 
@@ -80,8 +87,6 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
         self.canvasWidth = this.container.offsetWidth;
         self.canvasHeight = this.container.offsetHeight;
 
-        console.log(this.canvasWidth, this.canvasHeight);
-
         self.coordinateSystem = {
             stepX: 1400 / 12,
             stepY: 120
@@ -91,6 +96,16 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
     });
 
     this.makeConnection = function(params){
+        console.log(params.label);
+        let label;
+        if(params.label){
+            if(typeof params.label === 'string'){
+                label = params.label;
+            }
+            if(typeof params.label === 'object'){
+                label = params.label.value;
+            }
+        }
         const currentConnection = this.modeling.createConnection(
             params.from,
             params.to,
@@ -98,7 +113,7 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
                 type: params.type || 'bpmn:SequenceFlow',
                 businessObject: this.bpmnFactory.create(params.type || 'bpmn:SequenceFlow', {
                     id: Math.random().toString(36).substr(0, 20),
-                    name: params.label,
+                    name: label,
                 }),
             },
             this.process
@@ -106,21 +121,29 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
 
         if(params.waypoints){
             const keys = Object.entries(params.waypoints);
-            console.log(keys);
             keys.forEach(key => {
                 console.log(key[1]);
-                currentConnection.waypoints[parseInt(key[0])].x = key[1].x;
-                currentConnection.waypoints[parseInt(key[0])].y = key[1].y;
+                currentConnection.waypoints[parseInt(key[0])].x = key[1].i ? key[1].i * this.coordinateSystem.stepX : key[1].x;
+                currentConnection.waypoints[parseInt(key[0])].y = key[1].j ? key[1].j * this.coordinateSystem.stepY : key[1].y;
             });
             this.modeling.updateProperties(currentConnection, {
                 waypoints: currentConnection.waypoints
-            })
+            });
+            if(typeof params.label === 'object') {
+                this.modeling.updateLabel(currentConnection, params.label.value, {
+                    x: currentConnection.waypoints[1].x + 10,
+                    y: currentConnection.waypoints[1].y + 10,
+                    width: 100,
+                    height: 100
+                });
+            }
         }
     }
 
     this.drawGroup = function(group){
         console.log(!group.elements);
         if(!group.elements){
+            // eslint-disable-next-line no-throw-literal
             throw 'Для группы необходимо инициализировать поле elements';
         }
 
@@ -239,15 +262,13 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
         });
     }
 
-    this.drawLabel = function(elem){
-        const gatewayObject = this.elementFactory.createShape({
-            type: 'bpmn:TextAnnotation',
-        });
-
-        const gatewayShape = this.modeling.createShape(gatewayObject, {
-            x: elem.position.x || elem.position.i * this.coordinateSystem.stepX,
-            y: elem.position.y || elem.position.j * this.coordinateSystem.stepY
-        }, this.process);
+    this.drawLabel = function(e, elem){
+        const gatewayObject = this.elementFactory.createLabel(e, elem.position);
+        return gatewayObject;
+        // const gatewayShape = this.modeling.createShape(gatewayObject, {
+        //     x: elem.position.x || elem.position.i * this.coordinateSystem.stepX,
+        //     y: elem.position.y || elem.position.j * this.coordinateSystem.stepY
+        // }, this.process);
     }
 
     this.drawDiagram = function(diagramArray) {
@@ -262,6 +283,7 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
                 this.drawLabel(elem);
             }
         });
+
     }
 
 }
