@@ -1,6 +1,6 @@
 import BpmnModeller from "bpmn-js/lib/Modeler";
 
-const empty_xml = `
+const emptyXml = `
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn2:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="4.1.0" xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd">
   <bpmn2:process id="Process_1" isExecutable="false">
@@ -9,15 +9,19 @@ const empty_xml = `
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
       <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
-        <dc:Bounds x="182" y="82" width="36" height="36" />
+        <dc:Bounds x="182" y="82" width="0" height="0" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="168" y="125" width="64" height="14" />
+          <dc:Bounds x="168" y="125" width="0" height="0" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn2:definitions>
 `;
+
+const errorMessages = {
+    groupError: 'Для группы необходимо инициализировать поле elements'
+}
 
 class EventBusLogger {
     constructor(eventBus) {
@@ -52,21 +56,13 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
 
     const self = this;
 
-    this.bpmn.importXML(empty_xml.replace('START_EVENT_NAME', startEventName)).then(() => {
+    this.bpmn.importXML(emptyXml.replace('START_EVENT_NAME', startEventName)).then(() => {
         self.elementFactory = this.bpmn.get('elementFactory');
         self.elementRegistry = this.bpmn.get('elementRegistry');
         self.bpmnFactory = this.bpmn.get('bpmnFactory');
         self.modeling = this.bpmn.get('modeling');
         self.eventBus = this.bpmn.get('eventBus');
-
-        self.eventBus.on([
-            'commandStack.shape.move.postExecute',
-            'commandStack.connection.layout.postExecute'
-        ], function(e) {
-            console.log("on move: %o", e);
-        });
-
-        console.log(self.eventBus);
+        self.canvas = this.bpmn.get('canvas');
 
         const disabledEvents = [
             'element.hover',
@@ -76,10 +72,25 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
             'bendpoint.move.hover',
             'connect.hover',
             'global-connect.hover',
-            'element.marker.update'
+            'element.marker.update',
+            'drag.init',
+            'shape.move.init',
+            'drag.move',
+            'drag.end'
         ];
 
         self.eventBus.off(disabledEvents);
+
+        self.eventBus.on([
+            'drag.init',
+            'shape.move.init',
+            'drag.move',
+            'drag.end'
+
+        ], (e) => {
+            e.stopPropagation();
+        })
+
 
         self.process = this.elementRegistry.get('Process_1');
         self.startEvent = this.elementRegistry.get('StartEvent_1');
@@ -143,8 +154,7 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
     this.drawGroup = function(group){
         console.log(!group.elements);
         if(!group.elements){
-            // eslint-disable-next-line no-throw-literal
-            throw 'Для группы необходимо инициализировать поле elements';
+            throw errorMessages.groupError;
         }
 
         let minI, minJ, maxI, maxJ;
@@ -212,6 +222,11 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
                 businessObject: businessObject
             });
 
+            // this.modeling.setColor(elementShape, {
+            //     fill: '#123123',
+            //     stroke: '#fff',
+            // })
+
             this.modeling.createShape(elementShape, {
                 x: element.position.i * this.coordinateSystem.stepX,
                 y: element.position.j * this.coordinateSystem.stepY
@@ -271,6 +286,32 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
         // }, this.process);
     }
 
+    this.drawEndEvent = function(ee){
+        const businessObject = this.bpmnFactory.create('bpmn:EndEvent', {
+            id: "EndEvent",
+        });
+
+        const elementShape = this.elementFactory.createShape({
+            type: 'bpmn:EndEvent',
+            businessObject: businessObject
+        });
+
+        this.modeling.createShape(elementShape, {
+            x: ee.position.x || ee.position.i * this.coordinateSystem.stepX,
+            y: ee.position.y || ee.position.j * this.coordinateSystem.stepY
+        }, this.process);
+
+        if(ee.fromElements){
+            ee.fromElements.forEach(el => {
+                this.makeConnection({
+                    from: this.elementRegistry.get(el.elementId),
+                    to: elementShape,
+                    waypoints: el.waypoints
+                });
+            })
+        }
+    }
+
     this.drawDiagram = function(diagramArray) {
         diagramArray.forEach(elem => {
             if(elem.groupName){
@@ -282,7 +323,12 @@ export function BpmnPaint(containerSelector, modules = [], startEventName = ''){
             if(elem.label){
                 this.drawLabel(elem);
             }
+            if(elem.endEvent){
+                this.drawEndEvent(elem.endEvent);
+            }
         });
+
+        this.canvas.zoom('fit-viewport', 'auto');
 
     }
 

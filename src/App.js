@@ -170,6 +170,24 @@ function App() {
                         j: 5
                     }
                 },
+                {
+                    endEvent: {
+                        position: {
+                            i: 8,
+                            j: 11
+                        },
+                        fromElements: [
+                            {
+                                elementId: 'group_2',
+                                waypoints: []
+                            },
+                            {
+                                elementId: 'group_3',
+                                waypoints: []
+                            }
+                        ]
+                    }
+                }
             ]);
         });
 
